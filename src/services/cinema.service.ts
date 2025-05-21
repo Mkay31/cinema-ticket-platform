@@ -20,21 +20,32 @@ export class CinemaService {
         if (existingCinema) {
             throw ApiError.conflict(`Cinema with name ${name} already exists`);
         }
-        const cinema = new Cinema();
-        cinema.name = name;
-        cinema.totalSeats = totalSeats;
-        const savedCinema = await this.cinemaRepo.save(cinema);
-        // Create seats for the cinema
-        const seats: Seat[] = [];
-        for (let i = 1; i <= totalSeats; i++) {
-            const seat = new Seat();
-            seat.seatNumber = i;
-            seat.isOccupied = false;
-            seat.cinema = savedCinema;
-            seats.push(seat);
+        const queryRunner = this.cinemaRepo.manager.connection.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+        try {
+            const cinema = new Cinema();
+            cinema.name = name;
+            cinema.totalSeats = totalSeats;
+            const savedCinema = await queryRunner.manager.save(cinema);
+            const seats: Seat[] = [];
+            for (let i = 1; i <= totalSeats; i++) {
+                const seat = new Seat();
+                seat.seatNumber = i;
+                seat.isOccupied = false;
+                seat.cinema = savedCinema;
+                seats.push(seat);
+            }
+            throw new Error("dmldkmd");
+            await queryRunner.manager.save(seats);
+            await queryRunner.commitTransaction();
+            return savedCinema;
+        } catch (error) {
+            await queryRunner.rollbackTransaction();
+            throw error;
+        } finally {
+            await queryRunner.release();
         }
-        await this.seatRepo.save(seats);
-        return this.cinemaRepo.save(data);
     }
 
     async getCinemaList(page: number, page_size: number): Promise<{ cinemas: Cinema[], totalCount: number }> {
@@ -61,8 +72,15 @@ export class CinemaService {
     }
 
     async purchaseSeat(cinemaId: number, seatNumber: number): Promise<Seat> {
+        const queryRunner = this.seatRepo.manager.connection.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
         try {
-            const seat = await this.seatRepo.findOne({ where: { cinemaId, seatNumber } })
+            const seat = await queryRunner.manager.findOne(Seat, {
+                where: { cinemaId, seatNumber },
+                lock: { mode: "pessimistic_write" }
+            });
+
             if (!seat) {
                 throw ApiError.notFound(`Seat ${seatNumber} not found in cinema ${cinemaId}`);
             }
@@ -70,22 +88,33 @@ export class CinemaService {
             if (seat.isOccupied) {
                 throw ApiError.conflict(`Seat ${seatNumber} is already purchased`);
             }
-            seat.isOccupied = true;
-            await this.seatRepo.save(seat);
 
+            seat.isOccupied = true;
+            await queryRunner.manager.save(seat);
+            await queryRunner.commitTransaction();
             return seat;
         } catch (error) {
+            await queryRunner.rollbackTransaction();
             throw error;
+        } finally {
+            await queryRunner.release();
         }
     }
 
     async purchaseConsecutiveSeats(cinemaId: number): Promise<Seat[]> {
+        const queryRunner = this.seatRepo.manager.connection.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
         try {
-            const seats = await this.seatRepo.find({ where: { cinemaId, isOccupied: false }, order: { seatNumber: "ASC" } });
-            // Find first two consecutive free seats
+            const seats = await queryRunner.manager.find(Seat, {
+                where: { cinemaId, isOccupied: false },
+                order: { seatNumber: "ASC" },
+                lock: { mode: "pessimistic_write" }
+            });
+
             let consecutiveSeats: Seat[] = [];
             for (let i = 1; i < seats.length; i++) {
-                if (seats[i].seatNumber == seats[i - 1].seatNumber + 1) {
+                if (seats[i].seatNumber === seats[i - 1].seatNumber + 1) {
                     consecutiveSeats = [seats[i - 1], seats[i]];
                     break;
                 }
@@ -98,11 +127,15 @@ export class CinemaService {
             consecutiveSeats[0].isOccupied = true;
             consecutiveSeats[1].isOccupied = true;
 
-            await this.seatRepo.save(consecutiveSeats);
+            await queryRunner.manager.save(consecutiveSeats);
 
+            await queryRunner.commitTransaction();
             return consecutiveSeats;
         } catch (error) {
+            await queryRunner.rollbackTransaction();
             throw error;
+        } finally {
+            await queryRunner.release();
         }
     }
 
