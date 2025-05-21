@@ -13,7 +13,6 @@ export class CinemaService {
     @InjectRepository(Seat)
     private seatRepo: Repository<Seat>;
 
-
     async createCinema(data: CreateCinemaRequest): Promise<Cinema> {
         const { name, totalSeats } = data;
 
@@ -81,8 +80,6 @@ export class CinemaService {
     }
 
     async purchaseConsecutiveSeats(cinemaId: number): Promise<Seat[]> {
-
-
         try {
             const seats = await this.seatRepo.find({ where: { cinemaId, isOccupied: false }, order: { seatNumber: "ASC" } });
             // Find first two consecutive free seats
