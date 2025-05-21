@@ -1,5 +1,15 @@
 ## How to Test and Run the Project
 
+#### Update your .env file with your database credentials:
+```bash
+    DB_HOST=localhost
+    DB_PORT=5432
+    DB_USERNAME=your_db_username
+    DB_PASSWORD=your_db_password
+    DB_DATABASE=cinema_db
+    PORT=9000
+```
+
 ### Running the Project
 
 1. Install dependencies:
