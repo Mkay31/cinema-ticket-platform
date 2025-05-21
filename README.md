@@ -3,7 +3,7 @@
 #### Update your .env file with your database credentials:
 ```bash
     DB_HOST=localhost
-    DB_PORT=5432
+    DB_PORT=3306
     DB_USERNAME=your_db_username
     DB_PASSWORD=your_db_password
     DB_DATABASE=cinema_db
